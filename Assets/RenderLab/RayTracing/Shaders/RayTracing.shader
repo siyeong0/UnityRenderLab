@@ -81,6 +81,17 @@ Shader "Custom/RayTracing"
 			float sunIntensity;
 
 
+			float3 GetEnvironmentLight(Ray ray)
+			{
+				float skyGradientT = pow(smoothstep(0, 0.4, ray.dir.y), 0.35);
+				float groundToSkyT = smoothstep(-0.01, 0, ray.dir.y);
+				float3 skyGradient = lerp(skyColorHorizon, skyColorZenith, skyGradientT);
+				float sun = pow(max(0, dot(ray.dir, _WorldSpaceLightPos0.xyz)), sunFocus) * sunIntensity;
+				// Combine ground, sky, and sun
+				float3 composite = lerp(groundColor, skyGradient, groundToSkyT) + sun * (groundToSkyT>=1);
+				return composite;
+			}
+
 			// PCG (permuted congruential generator)
 			// https://en.wikipedia.org/wiki/Permuted_congruential_generator
 			float Rand(inout uint state)
@@ -139,17 +150,6 @@ Shader "Custom/RayTracing"
 				return hitInfo;
 			}
 
-			float3 GetEnvironmentLight(Ray ray)
-			{
-				float skyGradientT = pow(smoothstep(0, 0.4, ray.dir.y), 0.35);
-				float groundToSkyT = smoothstep(-0.01, 0, ray.dir.y);
-				float3 skyGradient = lerp(skyColorHorizon, skyColorZenith, skyGradientT);
-				float sun = pow(max(0, dot(ray.dir, _WorldSpaceLightPos0.xyz)), sunFocus) * sunIntensity;
-				// Combine ground, sky, and sun
-				float3 composite = lerp(groundColor, skyGradient, groundToSkyT) + sun * (groundToSkyT>=1);
-				return composite;
-			}
-
 			HitInfo CalculateRayCollision(Ray ray)
 			{
 				HitInfo closestHit = (HitInfo)0;
@@ -181,7 +181,7 @@ Shader "Custom/RayTracing"
 					if (hitInfo.bHit)
 					{
 						ray.origin = hitInfo.hitPoint;
-						ray.dir = RandHemisphereDirection(hitInfo.normal, state);
+						ray.dir = normalize(hitInfo.normal + RandDirection(state));
 
 						RayTracingMaterial material = hitInfo.material;
 						float3 emittedLight = material.emissionColor * material.emissionStrength;
