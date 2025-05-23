@@ -12,6 +12,10 @@ public class RayTracer : MonoBehaviour
 
     [SerializeField] uint maxRayBounceCount = 4;
     [SerializeField] uint numRaysPerPixel = 4;
+    [SerializeField] float divergeStrength = 0f;
+    [SerializeField] float defocusStrength = 0f;
+    [SerializeField] float focusDistance = 0.3f;
+
     [System.Serializable]
     public struct EnvironmentSettings
     {
@@ -40,7 +44,10 @@ public class RayTracer : MonoBehaviour
     int numTriangles;
 
     public static int triangleLimit = 65535;
-
+    void Start()
+    {
+        numRenderedFrames = 0;
+    }
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
 	{
         bool isSceneCam = Camera.current.name == "SceneCamera";
@@ -104,10 +111,10 @@ public class RayTracer : MonoBehaviour
 
     private void updateCameraParams(Camera camera)
 	{
-		float planeHegiht = camera.nearClipPlane * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) * 2f;
+		float planeHegiht = focusDistance * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) * 2f;
 		float planeWidth = planeHegiht * camera.aspect;
 
-		rayTracingMaterial.SetVector("viewParams", new Vector3(planeWidth, planeHegiht, camera.nearClipPlane));
+		rayTracingMaterial.SetVector("viewParams", new Vector3(planeWidth, planeHegiht, focusDistance));
 		rayTracingMaterial.SetMatrix("cameraLocalToWorldMatrix", camera.transform.localToWorldMatrix);
     }
 
@@ -115,6 +122,8 @@ public class RayTracer : MonoBehaviour
     {
         rayTracingMaterial.SetInt("maxRayBounceCount", (int)maxRayBounceCount);
         rayTracingMaterial.SetInt("numRaysPerPixel", (int)numRaysPerPixel);
+        rayTracingMaterial.SetFloat("divergeStrength", divergeStrength);
+        rayTracingMaterial.SetFloat("defocusStrength", defocusStrength);
 
         rayTracingMaterial.SetInt("useEnvironmentLighting", environmentSettings.useEnvironmentLighting ? 1 : 0);
         rayTracingMaterial.SetColor("groundColor", environmentSettings.groundColour);

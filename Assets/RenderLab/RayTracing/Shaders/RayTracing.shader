@@ -100,6 +100,9 @@ Shader "Custom/RayTracing"
 			float sunFocus;
 			float sunIntensity;
 
+			float divergeStrength;
+			float defocusStrength;
+
 
 			float3 GetEnvironmentLight(Ray ray)
 			{
@@ -144,6 +147,13 @@ Shader "Custom/RayTracing"
 			{
 				float3 dir = RandDirection(state);
 				return dir * sign(dot(normal, dir));
+			}
+
+			float2 RandPointInCircle(inout uint state)
+			{
+				float theta = 2.0 * 3.14159265358979323846 * Rand(state);
+				float r = sqrt(Rand(state));
+				return float2(cos(theta), sin(theta)) * r;
 			}
 
 			bool RayBoundingBox(Ray ray, float3 boxMin, float3 boxMax)
@@ -295,16 +305,23 @@ Shader "Custom/RayTracing"
 				uint pixelIndex = pixelCoord.y * numPixels.x + pixelCoord.x;
 				uint randState = pixelIndex + frame * 719393;
 
-				float3 viewPointLocal = float3(i.uv - 0.5, 1.0) * viewParams;
-				float3 viewPoint = mul(cameraLocalToWorldMatrix, float4(viewPointLocal, 1.0));
+				float3 focusPointLocal = float3(i.uv - 0.5, 1.0) * viewParams;
+				float3 focusPoint = mul(cameraLocalToWorldMatrix, float4(focusPointLocal, 1.0));
+
+				float3 cameraRight = cameraLocalToWorldMatrix._m00_m10_m20;
+				float3 cameraUp = cameraLocalToWorldMatrix._m01_m11_m21;
 
 				Ray ray;
-				ray.origin = _WorldSpaceCameraPos;
-				ray.dir = normalize(viewPoint - ray.origin);
-
 				float3 totalIncomingLight = 0;
 				for (int i = 0; i < numRaysPerPixel; ++i)
 				{
+					float2 defocusJitter = RandPointInCircle(randState) * defocusStrength / numPixels.x;
+					ray.origin = _WorldSpaceCameraPos + defocusJitter.x * cameraRight + defocusJitter.y * cameraUp;
+
+					float2 jitter = RandPointInCircle(randState) * divergeStrength / numPixels.x;
+					float3 jitteredFocusPoint = focusPoint + jitter.x * cameraRight + jitter.y * cameraUp;
+					ray.dir = normalize(jitteredFocusPoint - ray.origin);
+
 					totalIncomingLight += Trace(ray, randState);
 				}
 
