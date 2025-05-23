@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 
+[System.Serializable]
 public struct Sphere
 {
 	public Vector3 position;

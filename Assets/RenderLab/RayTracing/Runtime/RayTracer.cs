@@ -92,7 +92,7 @@ public class RayTracer : MonoBehaviour
         ShaderHelper.InitMaterial(rayTracingShader, ref rayTracingMaterial);
         ShaderHelper.InitMaterial(accumulateShader, ref accumulateMaterial);
         // Create result render texture
-        ShaderHelper.CreateRenderTexture(ref resultTexture, Screen.width, Screen.height, FilterMode.Bilinear, GraphicsFormat.R32G32B32A32_SFloat, "Result");
+        if (resultTexture == null) ShaderHelper.CreateRenderTexture(ref resultTexture, Screen.width, Screen.height, FilterMode.Bilinear, GraphicsFormat.R32G32B32A32_SFloat, "Result");
 
         // Update data
         updateCameraParams(Camera.current);
@@ -128,22 +128,22 @@ public class RayTracer : MonoBehaviour
 	{
 		// Create sphere data from the sphere objects in the scene
 		RayTracedSphere[] sphereObjects = FindObjectsByType<RayTracedSphere>(FindObjectsSortMode.None);
-		Sphere[] spheres = new Sphere[sphereObjects.Length];
+        List<Sphere> spheres = new List<Sphere>();
 
-		for (int i = 0; i < sphereObjects.Length; i++)
+        for (int i = 0; i < sphereObjects.Length; i++)
 		{
-			spheres[i] = new Sphere()
+			spheres.Add(new Sphere()
 			{
 				position = sphereObjects[i].transform.position,
 				radius = sphereObjects[i].transform.localScale.x * 0.5f,
 				material = sphereObjects[i].material
-			};
+			});
 		}
 
         if (sphereObjects.Length == 0) return;
 
 		// Create buffer containing all sphere data, and send it to the shader
-		ShaderHelper.CreateStructuredBuffer(ref sphereBuffer, spheres);
+        ShaderHelper.CreateStructuredBuffer(ref sphereBuffer, spheres);
 		rayTracingMaterial.SetBuffer("spheres", sphereBuffer);
 		rayTracingMaterial.SetInt("numSpheres", sphereObjects.Length);
 	}
@@ -181,8 +181,25 @@ public class RayTracer : MonoBehaviour
         rayTracingMaterial.SetInt("numMeshes", allMeshInfo.Count);
     }
 
+    private void OnDisable()
+    {
+        sphereBuffer?.Release();
+        triangleBuffer?.Release();
+        meshInfoBuffer?.Release();
+
+        sphereBuffer = null;
+        triangleBuffer = null;
+        meshInfoBuffer = null;
+    }
+
     private void OnDestroy()
 	{
         sphereBuffer?.Release();
+        triangleBuffer?.Release();
+        meshInfoBuffer?.Release();
+
+        sphereBuffer = null;
+        triangleBuffer = null;
+        meshInfoBuffer = null;
     }
 }

@@ -258,15 +258,25 @@ Shader "Custom/RayTracing"
 				for (int i = 0; i <= maxRayBounceCount; ++i)
 				{
 					HitInfo hitInfo = CalculateRayCollision(ray);
+
 					if (hitInfo.bHit)
 					{
-						ray.origin = hitInfo.hitPoint;
-						ray.dir = normalize(hitInfo.normal + RandDirection(state));
-
 						RayTracingMaterial material = hitInfo.material;
+						bool bSpecularBounce = material.specularProbability >= Rand(state);
+
+						ray.origin = hitInfo.hitPoint;
+						float3 diffuseDir = normalize(hitInfo.normal + RandDirection(state));
+						float3 specularDir = reflect(ray.dir, hitInfo.normal);
+						ray.dir = normalize(lerp(diffuseDir, specularDir, material.smoothness * bSpecularBounce));
+
 						float3 emittedLight = material.emissionColor * material.emissionStrength;
 						incomingLight += emittedLight * rayColor;
-						rayColor *= material.color;
+						rayColor *= lerp(material.color, material.specularColor, bSpecularBounce);
+
+						float p = max(rayColor.r, max(rayColor.g, rayColor.b));
+						if (Rand(state) >= p)
+							break;
+						rayColor *= 1.0f / p; 
 					}
 					else
 					{

@@ -16,14 +16,12 @@ public static class ShaderHelper
 			mat = new Material(shader);
 		}
 	}
-
     public static RenderTexture CreateRenderTexture(RenderTexture template)
     {
         RenderTexture renderTexture = null;
         CreateRenderTexture(ref renderTexture, template);
         return renderTexture;
     }
-
     public static RenderTexture CreateRenderTexture(int width, int height, FilterMode filterMode, GraphicsFormat format, string name = "Unnamed", int depth = 0, bool useMipMaps = false)
     {
         RenderTexture texture = new RenderTexture(width, height, depth);
@@ -38,7 +36,6 @@ public static class ShaderHelper
         texture.filterMode = filterMode;
         return texture;
     }
-
     public static void CreateRenderTexture(ref RenderTexture texture, RenderTexture template)
     {
         if (texture != null)
@@ -49,7 +46,6 @@ public static class ShaderHelper
         texture.enableRandomWrite = true;
         texture.Create();
     }
-
     public static bool CreateRenderTexture(ref RenderTexture texture, int width, int height, FilterMode filterMode, GraphicsFormat format, string name = "Unnamed", int depth = 0, bool useMipMaps = false)
     {
         if (texture == null || !texture.IsCreated() || texture.width != width || texture.height != height || texture.graphicsFormat != format || texture.depth != depth || texture.useMipMap != useMipMaps)
@@ -70,7 +66,6 @@ public static class ShaderHelper
 
         return false;
     }
-
     public static void CreateStructuredBuffer<T>(ref ComputeBuffer buffer, int count)
 	{
 		int stride = GetStride<T>();
@@ -81,8 +76,6 @@ public static class ShaderHelper
 			buffer = new ComputeBuffer(count, stride);
 		}
 	}
-
-
 	public static ComputeBuffer CreateStructuredBuffer<T>(T[] data)
 	{
 		var buffer = new ComputeBuffer(data.Length, GetStride<T>());
@@ -108,14 +101,12 @@ public static class ShaderHelper
 			buffer = new ComputeBuffer(data.Count, stride);
 		}
 		buffer.SetData(data);
-		// Debug.Log(buffer.IsValid());
 	}
 
 	public static ComputeBuffer CreateStructuredBuffer<T>(int count)
 	{
 		return new ComputeBuffer(count, GetStride<T>());
 	}
-
 	public static void CreateStructuredBuffer<T>(ref ComputeBuffer buffer, T[] data)
 	{
 		CreateStructuredBuffer<T>(ref buffer, data.Length);
