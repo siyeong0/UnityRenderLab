@@ -64,16 +64,36 @@ Shader "Custom/RayTracing"
 				RayTracingMaterial material;
 			};
 
+			struct Triangle
+			{
+				float3 posA, posB, posC;
+				float3 normalA, normalB, normalC;
+			};
+
+			struct MeshInfo
+			{
+				uint firstTriangleIndex;
+				uint numTriangles;
+				RayTracingMaterial material;
+				float3 boundsMin;
+				float3 boundsMax;
+			};
+
 			float3 viewParams;
 			float4x4 cameraLocalToWorldMatrix;
 
 			StructuredBuffer<Sphere> spheres;
 			int numSpheres;
 
+			StructuredBuffer<Triangle> triangles;
+			StructuredBuffer<MeshInfo> meshInfos;
+			int numMeshes;
+
 			int maxRayBounceCount;
 			int numRaysPerPixel;
 			int frame;
 
+			int useEnvironmentLighting;
 			float4 groundColor;
 			float4 skyColorHorizon;
 			float4 skyColorZenith;
@@ -83,6 +103,9 @@ Shader "Custom/RayTracing"
 
 			float3 GetEnvironmentLight(Ray ray)
 			{
+				if (!useEnvironmentLighting)
+					return 0;
+
 				float skyGradientT = pow(smoothstep(0, 0.4, ray.dir.y), 0.35);
 				float groundToSkyT = smoothstep(-0.01, 0, ray.dir.y);
 				float3 skyGradient = lerp(skyColorHorizon, skyColorZenith, skyGradientT);
@@ -123,6 +146,18 @@ Shader "Custom/RayTracing"
 				return dir * sign(dot(normal, dir));
 			}
 
+			bool RayBoundingBox(Ray ray, float3 boxMin, float3 boxMax)
+			{
+				float3 invDir = 1 / ray.dir;
+				float3 tMin = (boxMin - ray.origin) * invDir;
+				float3 tMax = (boxMax - ray.origin) * invDir;
+				float3 t1 = min(tMin, tMax);
+				float3 t2 = max(tMin, tMax);
+				float tNear = max(max(t1.x, t1.y), t1.z);
+				float tFar = min(min(t2.x, t2.y), t2.z);
+				return tNear <= tFar;
+			};
+
 			HitInfo RaySphere(Ray ray, Sphere sphere)
 			{
 				HitInfo hitInfo = (HitInfo)0;
@@ -143,9 +178,35 @@ Shader "Custom/RayTracing"
 						hitInfo.distance = dist;
 						hitInfo.hitPoint = ray.origin + ray.dir * dist;
 						hitInfo.normal = normalize(hitInfo.hitPoint - sphere.position);
-						hitInfo.material = sphere.material;
 					}
 				}
+
+				return hitInfo;
+			}
+
+			HitInfo RayTriangle(Ray ray, Triangle tri)
+			{
+				float3 edgeAB = tri.posB - tri.posA;
+				float3 edgeAC = tri.posC - tri.posA;
+				float3 normalVector = cross(edgeAB, edgeAC);
+				float3 ao = ray.origin - tri.posA;
+				float3 dao = cross(ao, ray.dir);
+
+				float determinant = -dot(ray.dir, normalVector);
+				float invDet = 1 / determinant;
+				
+				// Calculate dst to triangle & barycentric coordinates of intersection point
+				float dist = dot(ao, normalVector) * invDet;
+				float u = dot(edgeAC, dao) * invDet;
+				float v = -dot(edgeAB, dao) * invDet;
+				float w = 1 - u - v;
+				
+				// Initialize hit info
+				HitInfo hitInfo;
+				hitInfo.bHit = determinant >= 1E-6 && dist >= 0 && u >= 0 && v >= 0 && w >= 0;
+				hitInfo.hitPoint = ray.origin + ray.dir * dist;
+				hitInfo.normal = normalize(tri.normalA * w + tri.normalB * u + tri.normalC * v);
+				hitInfo.distance = dist;
 
 				return hitInfo;
 			}
@@ -155,6 +216,7 @@ Shader "Custom/RayTracing"
 				HitInfo closestHit = (HitInfo)0;
 				closestHit.distance = 9999.9;
 
+				// spheres
 				for(int i = 0; i < numSpheres; ++i)
 				{
 					Sphere sphere = spheres[i];
@@ -164,6 +226,24 @@ Shader "Custom/RayTracing"
 					{
 						closestHit = hitInfo;
 						closestHit.material = sphere.material;
+					}
+				}
+				// meshes
+				for(int m = 0; m < numMeshes; ++m)
+				{
+					MeshInfo meshInfo = meshInfos[m];
+					if (!RayBoundingBox(ray, meshInfo.boundsMin, meshInfo.boundsMax))
+						continue;
+
+					for(int t = 0; t < meshInfo.numTriangles; ++t)
+					{
+						Triangle tri = triangles[meshInfo.firstTriangleIndex + t];
+						HitInfo hitInfo = RayTriangle(ray, tri);
+						if (hitInfo.bHit && hitInfo.distance < closestHit.distance)
+						{
+							closestHit = hitInfo;
+							closestHit.material = meshInfo.material;
+						}
 					}
 				}
 				

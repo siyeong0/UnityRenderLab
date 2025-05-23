@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using static UnityEngine.GraphicsBuffer;
@@ -11,9 +12,10 @@ public class RayTracer : MonoBehaviour
 
     [SerializeField] uint maxRayBounceCount = 4;
     [SerializeField] uint numRaysPerPixel = 4;
-[System.Serializable]
+    [System.Serializable]
     public struct EnvironmentSettings
     {
+        public bool useEnvironmentLighting;
         public Color groundColour;
         public Color skyColourHorizon;
         public Color skyColourZenith;
@@ -27,8 +29,17 @@ public class RayTracer : MonoBehaviour
     RenderTexture resultTexture;
 
     ComputeBuffer sphereBuffer;
+    ComputeBuffer triangleBuffer;
+    ComputeBuffer meshInfoBuffer;
 
-    int numRenderedFrames = 0;
+    List<Triangle> allTriangles;
+    List<MeshInfo> allMeshInfo;
+
+    int numRenderedFrames;
+    int numMeshChunks;
+    int numTriangles;
+
+    public static int triangleLimit = 65535;
 
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
 	{
@@ -87,6 +98,7 @@ public class RayTracer : MonoBehaviour
         updateCameraParams(Camera.current);
 		updateShaderParams();
         updateSpheres();
+        updateMeshes();
 
     }
 
@@ -104,6 +116,7 @@ public class RayTracer : MonoBehaviour
         rayTracingMaterial.SetInt("maxRayBounceCount", (int)maxRayBounceCount);
         rayTracingMaterial.SetInt("numRaysPerPixel", (int)numRaysPerPixel);
 
+        rayTracingMaterial.SetInt("useEnvironmentLighting", environmentSettings.useEnvironmentLighting ? 1 : 0);
         rayTracingMaterial.SetColor("groundColor", environmentSettings.groundColour);
         rayTracingMaterial.SetColor("skyColorHorizon", environmentSettings.skyColourHorizon);
         rayTracingMaterial.SetColor("skyColorZenith", environmentSettings.skyColourZenith);
@@ -127,13 +140,48 @@ public class RayTracer : MonoBehaviour
 			};
 		}
 
+        if (sphereObjects.Length == 0) return;
+
 		// Create buffer containing all sphere data, and send it to the shader
 		ShaderHelper.CreateStructuredBuffer(ref sphereBuffer, spheres);
 		rayTracingMaterial.SetBuffer("spheres", sphereBuffer);
 		rayTracingMaterial.SetInt("numSpheres", sphereObjects.Length);
 	}
 
-	private void OnDestroy()
+    private void updateMeshes()
+    {
+        RayTracedMesh[] meshObjects = FindObjectsByType<RayTracedMesh>(FindObjectsSortMode.None);
+
+        allTriangles ??= new List<Triangle>();
+        allMeshInfo ??= new List<MeshInfo>();
+        allTriangles.Clear();
+        allMeshInfo.Clear();
+
+        for (int i = 0; i < meshObjects.Length; i++)
+        {
+            MeshChunk[] chunks = meshObjects[i].GetSubMeshes();
+            foreach (MeshChunk chunk in chunks)
+            {
+                RayTracingMaterial material = meshObjects[i].GetMaterial(chunk.subMeshIndex);
+                allMeshInfo.Add(new MeshInfo(allTriangles.Count, chunk.triangles.Length, material, chunk.bounds));
+                allTriangles.AddRange(chunk.triangles);
+
+            }
+        }
+
+        numMeshChunks = allMeshInfo.Count;
+        numTriangles = allTriangles.Count;
+
+        if (numMeshChunks == 0) return;
+
+        ShaderHelper.CreateStructuredBuffer(ref triangleBuffer, allTriangles);
+        ShaderHelper.CreateStructuredBuffer(ref meshInfoBuffer, allMeshInfo);
+        rayTracingMaterial.SetBuffer("triangles", triangleBuffer);
+        rayTracingMaterial.SetBuffer("meshInfos", meshInfoBuffer);
+        rayTracingMaterial.SetInt("numMeshes", allMeshInfo.Count);
+    }
+
+    private void OnDestroy()
 	{
         sphereBuffer?.Release();
     }
