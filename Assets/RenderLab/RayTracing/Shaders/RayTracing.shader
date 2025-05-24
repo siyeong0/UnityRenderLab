@@ -260,6 +260,11 @@ Shader "Custom/RayTracing"
 				return closestHit;
 			}
 
+			float2 mod2(float2 x, float2 y)
+			{
+				return x - y * floor(x/y);
+			}
+
 			float3 Trace(Ray ray, inout uint state)
 			{
 				float3 incomingLight = 0;
@@ -272,6 +277,14 @@ Shader "Custom/RayTracing"
 					if (hitInfo.bHit)
 					{
 						RayTracingMaterial material = hitInfo.material;
+
+						if (material.flag == 1) // checker pattern
+						{
+							float2 c = mod2(floor(hitInfo.hitPoint.xz), 2.0);
+							material.color = c.x == c.y ? material.color : material.emissionColor;
+							material.specularColor = material.color;
+						}
+
 						bool bSpecularBounce = material.specularProbability >= Rand(state);
 
 						ray.origin = hitInfo.hitPoint;
