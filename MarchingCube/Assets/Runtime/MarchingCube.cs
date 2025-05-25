@@ -33,7 +33,7 @@ public class MarchingCube : MonoBehaviour
 
 	void Update()
 	{
-		if (rotateCamera)
+		if (rotateCamera && Application.isPlaying)
 		{
 			Camera.main.transform.RotateAround(bounds.center, Vector3.up, 20 * Time.deltaTime);
 		}
@@ -201,11 +201,23 @@ public class MarchingCube : MonoBehaviour
 	private void initBufferPerlinNoise(float scale = 0.1f, float threshold = 0.5f)
 	{
 		buffer = new int[(int)(bounds.size.x / cubeSize + 1), (int)(bounds.size.y / cubeSize + 1), (int)(bounds.size.z / cubeSize + 1)];
+
 		for (int x = 0; x < buffer.GetLength(0); x++)
 		{
 			for (int y = 0; y < buffer.GetLength(1); y++)
 			{
 				for (int z = 0; z < buffer.GetLength(2); z++)
+				{
+					buffer[x, y, z] = -34;
+				}
+			}
+		}
+
+		for (int x = 1; x < buffer.GetLength(0) - 1; x++)
+		{
+			for (int y = 1; y < buffer.GetLength(1) - 1; y++)
+			{
+				for (int z = 1; z < buffer.GetLength(2) - 1; z++)
 				{
 					float nx = x * scale;
 					float ny = y * scale;
