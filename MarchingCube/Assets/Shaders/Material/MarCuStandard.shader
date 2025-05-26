@@ -10,6 +10,8 @@
 
 	SubShader
 	{
+        Tags { "LightMode" = "ForwardBase" }
+
 		Cull Off
 
 		Pass
@@ -19,7 +21,7 @@
 			#pragma fragment frag
 
 			#include "UnityCG.cginc"
-			#include "Includes/Triangle.hlsl"
+			#include "../Includes/Triangle.hlsl"
 
 			sampler2D _MainTex;
 			float4 _Color;
@@ -39,7 +41,6 @@
                 float3 worldPos : TEXCOORD0;
                 float3 normal : TEXCOORD1;
             };
-
 
 			v2f vert(appdata v)
             {

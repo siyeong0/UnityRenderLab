@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-public class MarCuMeshGenerator : MonoBehaviour
+public class MarCuMeshGeneratorGPU : MonoBehaviour
 {
 	[SerializeField] ComputeShader marchingCubeComputeShader;
 	[SerializeField] Material material;
