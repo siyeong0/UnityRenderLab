@@ -4,7 +4,7 @@
 
 It contains ...
 - Ray tracing
-- Marching cube
+- Marching cubes
 
 ## Ray tracing
 
