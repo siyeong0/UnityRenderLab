@@ -43,6 +43,7 @@ public class MarchingCube : MonoBehaviour
 	{
 		meshFilter = GetComponent<MeshFilter>();
 		meshRenderer = GetComponent<MeshRenderer>();
+		// initBufferRandomNoise();
 		initBufferPerlinNoise();
 	}
 
@@ -96,14 +97,14 @@ public class MarchingCube : MonoBehaviour
 				{
 					Vector4[] corners = new Vector4[8]
 						{
-							GetCubeVert(x    , y    , z    ),
-							GetCubeVert(x + 1, y	, z    ),
-							GetCubeVert(x + 1, y	, z + 1),
-							GetCubeVert(x    , y	, z + 1),
-							GetCubeVert(x    , y + 1, z    ),
-							GetCubeVert(x + 1, y + 1, z    ),
-							GetCubeVert(x + 1, y + 1, z + 1),
-							GetCubeVert(x    , y + 1, z + 1)
+							getCubeVert(x    , y    , z    ),
+							getCubeVert(x + 1, y	, z    ),
+							getCubeVert(x + 1, y	, z + 1),
+							getCubeVert(x    , y	, z + 1),
+							getCubeVert(x    , y + 1, z    ),
+							getCubeVert(x + 1, y + 1, z    ),
+							getCubeVert(x + 1, y + 1, z + 1),
+							getCubeVert(x    , y + 1, z + 1)
 						};
 
 					uint cubeIndex = 0;
@@ -127,13 +128,13 @@ public class MarchingCube : MonoBehaviour
 						int a2 = MarchTable.cornerIndexAFromEdge[MarchTable.triangulation[cubeIndex, i + 2]];
 						int b2 = MarchTable.cornerIndexBFromEdge[MarchTable.triangulation[cubeIndex, i + 2]];
 
-						Vector3 vertexA = (corners[a0] + corners[b0]) * 0.5f;
-						Vector3 vertexB = (corners[a1] + corners[b1]) * 0.5f;
-						Vector3 vertexC = (corners[a2] + corners[b2]) * 0.5f;
+						//Vector3 vertexA = (corners[a0] + corners[b0]) * 0.5f;
+						//Vector3 vertexB = (corners[a1] + corners[b1]) * 0.5f;
+						//Vector3 vertexC = (corners[a2] + corners[b2]) * 0.5f;
 
-						//Vector3 vertexA = interpolateVerts(corners[a0], corners[b0]);
-						//Vector3 vertexB = interpolateVerts(corners[a1], corners[b1]);
-						//Vector3 vertexC = interpolateVerts(corners[a2], corners[b2]);
+						Vector3 vertexA = interpolateVerts(corners[a0], corners[b0]);
+						Vector3 vertexB = interpolateVerts(corners[a1], corners[b1]);
+						Vector3 vertexC = interpolateVerts(corners[a2], corners[b2]);
 
 						triangles.Add(new Triangle(vertexA, vertexB, vertexC));
 					}
@@ -144,7 +145,7 @@ public class MarchingCube : MonoBehaviour
 		return triangles;
 	}
 
-	private Vector4 GetCubeVert(int x, int y, int z)
+	private Vector4 getCubeVert(int x, int y, int z)
 	{
 		Vector3 position = bounds.min + new Vector3(x * cubeSize, y * cubeSize, z * cubeSize);
 		return new Vector4(position.x, position.y, position.z, buffer[x, y, z]);
@@ -186,11 +187,23 @@ public class MarchingCube : MonoBehaviour
 	private void initBufferRandomNoise()
 	{
 		buffer = new int[(int)(bounds.size.x / cubeSize + 1), (int)(bounds.size.y / cubeSize + 1), (int)(bounds.size.z / cubeSize + 1)];
+
 		for (int x = 0; x < buffer.GetLength(0); x++)
 		{
 			for (int y = 0; y < buffer.GetLength(1); y++)
 			{
 				for (int z = 0; z < buffer.GetLength(2); z++)
+				{
+					buffer[x, y, z] = -34;
+				}
+			}
+		}
+
+		for (int x = 1; x < buffer.GetLength(0) - 1; x++)
+		{
+			for (int y = 1; y < buffer.GetLength(1) - 1; y++)
+			{
+				for (int z = 1; z < buffer.GetLength(2) - 1; z++)
 				{
 					buffer[x, y, z] = Random.Range(-34, 16);
 				}

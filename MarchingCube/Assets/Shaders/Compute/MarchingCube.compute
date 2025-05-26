@@ -1,0 +1,104 @@
+#include "../Includes/MarchTable.hlsl"
+#include "../Includes/Triangle.hlsl"
+
+#pragma kernel March
+
+RWStructuredBuffer<uint> packedGridBuffer;
+float cubeSize;
+uint bitPerCell;
+float3 boundsMin;
+uint3 gridSize;
+float surfaceLevel;
+
+AppendStructuredBuffer<Triangle> triangleBuffer;
+
+uint GetGridCell(uint3 id)
+{
+	uint idx = (id.z * gridSize.x * gridSize.y + id.y * gridSize.x + id.x);
+	uint packedIdx = idx / bitPerCell;
+	uint offset = idx % bitPerCell;
+	return (packedGridBuffer[packedIdx] >> (offset * bitPerCell)) & 0xF;
+}
+
+void SetGridCell(uint value, uint3 id)
+{
+	uint idx = (id.z * gridSize.x * gridSize.y + id.y * gridSize.x + id.x);
+	uint packedIdx = idx / bitPerCell;
+	uint offset = idx % bitPerCell;
+	uint mask = ((1u << bitPerCell) - 1u) << (offset * bitPerCell);
+	packedGridBuffer[packedIdx] = (packedGridBuffer[packedIdx] & ~mask) | ((value & ((1u << bitPerCell) - 1u)) << (offset * bitPerCell));
+}
+
+int GetCellMaxValue()
+{
+	return 1 << bitPerCell;
+}
+
+float4 GetCubeVert(uint3 id)
+{
+	float3 position = boundsMin + float3(id.x * cubeSize, id.y * cubeSize, id.z * cubeSize);
+	float surfaceValue = (float) GetGridCell(id) / (float) GetCellMaxValue();
+	return float4(position.x, position.y, position.z, surfaceValue);
+}
+
+float3 InterpolateVerts(float4 v1, float4 v2)
+{
+	float denom = v2.w - v1.w;
+	float t = denom == 0.0f ? 0.5f : (surfaceLevel - v1.w) / denom;
+	return v1.xyz + t * (v2.xyz - v1.xyz);
+}
+
+[numthreads(8, 8, 8)]
+void March(uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= gridSize.x - 1 || id.y >= gridSize.y - 1 || id.z >= gridSize.z - 1)
+		return;
+	
+	float4 corners[8] =
+	{
+		GetCubeVert(id + uint3(0, 0, 0)),
+		GetCubeVert(id + uint3(1, 0, 0)),
+		GetCubeVert(id + uint3(1, 0, 1)),
+		GetCubeVert(id + uint3(0, 0, 1)),
+		GetCubeVert(id + uint3(0, 1, 0)),
+		GetCubeVert(id + uint3(1, 1, 0)),
+		GetCubeVert(id + uint3(1, 1, 1)),
+		GetCubeVert(id + uint3(0, 1, 1))
+	};
+	
+	uint cubeIndex = 0;
+	if (corners[0].w < surfaceLevel)
+		cubeIndex |= 1u;
+	if (corners[1].w < surfaceLevel)
+		cubeIndex |= 2u;
+	if (corners[2].w < surfaceLevel)
+		cubeIndex |= 4u;
+	if (corners[3].w < surfaceLevel)
+		cubeIndex |= 8u;
+	if (corners[4].w < surfaceLevel)
+		cubeIndex |= 16u;
+	if (corners[5].w < surfaceLevel)
+		cubeIndex |= 32u;
+	if (corners[6].w < surfaceLevel)
+		cubeIndex |= 64u;
+	if (corners[7].w < surfaceLevel)
+		cubeIndex |= 128u;
+	
+	for (int i = 0; triangulation[cubeIndex][i] != -1; i += 3)
+	{
+		int a0 = cornerIndexAFromEdge[triangulation[cubeIndex][i]];
+		int b0 = cornerIndexBFromEdge[triangulation[cubeIndex][i]];
+
+		int a1 = cornerIndexAFromEdge[triangulation[cubeIndex][i + 1]];
+		int b1 = cornerIndexBFromEdge[triangulation[cubeIndex][i + 1]];
+
+		int a2 = cornerIndexAFromEdge[triangulation[cubeIndex][i + 2]];
+		int b2 = cornerIndexBFromEdge[triangulation[cubeIndex][i + 2]];
+
+		Triangle tri;
+		tri.vertexA = InterpolateVerts(corners[a0], corners[b0]);
+		tri.vertexB = InterpolateVerts(corners[a1], corners[b1]);
+		tri.vertexC = InterpolateVerts(corners[a2], corners[b2]);
+		triangleBuffer.Append(tri);
+	}
+}
