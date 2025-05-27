@@ -1,0 +1,180 @@
+#include "SDFShape.hlsl"
+
+#pragma kernel CSMain
+
+Texture2D<float4> sourceTex;
+RWTexture2D<float4> destinationTex;
+
+RWStructuredBuffer<Shape> shapeBuffer;
+int numShapes;
+
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
+
+float3 _Light;
+bool bPositionLight;
+
+static const float SHADOW_BIAS = EPSILON * 50.0;
+
+struct Ray
+{
+	float3 origin;
+	float3 direction;
+};
+
+float4 Combine(int operation, float4 infoA, float4 infoB, float blendStrength)
+{
+	float4 result = 0;
+	float h = 0;
+	
+	switch (operation)
+	{
+		case 0: // union
+			result = infoA.w < infoB.w ? infoA : infoB;
+			return result;
+		case 1: // substract
+			result = infoA.w > -infoB.w ? infoA : float4(infoB.rgb, -infoB.w);
+			return result;
+		case 2: // intersect
+			result = infoA.w > infoB.w ? infoA : infoB;
+			return result;
+		case 3: // smooth union
+			h = clamp(0.5 + 0.5 * (infoB.w - infoA.w) / blendStrength, 0.0, 1.0);
+			result.w = lerp(infoB.w, infoA.w, h) - blendStrength * h * (1.0 - h);
+			result.rgb = lerp(infoB.rgb, infoA.rgb, h);
+			return result;
+		case 4: // smooth substract
+			h = clamp(0.5 - 0.5 * (infoB.w + infoA.w) / blendStrength, 0.0, 1.0);
+			result.w = lerp(infoA.w, -infoB.w, h) + blendStrength * h * (1.0 - h);
+			result.rgb = lerp(infoA.rgb, infoB.rgb, h);
+			return result;
+		case 5: // smooth intersect
+			h = clamp(0.5 - 0.5 * (infoB.w - infoA.w) / blendStrength, 0.0, 1.0);
+			result.w = lerp(infoB.w, infoA.w, h) + blendStrength * h * (1.0 - h);
+			result.rgb = lerp(infoB.rgb, infoA.rgb, h);
+			return result;
+		default:
+			return result;
+	}
+	
+	return result;
+}
+
+float4 QueryScene(float3 p)
+{
+	float4 globInfo = float4(1, 1, 1, MAX_DISTANCE); // color, dist
+
+	for (int i = 0; i < numShapes; ++i)
+	{
+		Shape shape = shapeBuffer[i];
+		float localDist = CalcSignedDistance(p, shape);
+		float4 localInfo = float4(shape.color, localDist);
+
+		int numChildren = shape.numChildren;
+		for (int j = 0; j < numChildren; j++)
+		{
+			Shape childShape = shapeBuffer[i + j + 1];
+			float childDist = CalcSignedDistance(p, childShape);
+			float4 childInfo = float4(childShape.color, childDist);
+			localInfo = Combine(childShape.operation, localInfo, childInfo, childShape.smoothness);
+		}
+		i += numChildren; // skip over children in outer loop
+		
+		globInfo = Combine(shape.operation, globInfo, localInfo, shape.smoothness);
+	}
+	return globInfo;
+}
+
+float3 EstimateNormal(float3 p)
+{
+	float x = QueryScene(float3(p.x + EPSILON, p.y, p.z)).w - QueryScene(float3(p.x - EPSILON, p.y, p.z)).w;
+	float y = QueryScene(float3(p.x, p.y + EPSILON, p.z)).w - QueryScene(float3(p.x, p.y - EPSILON, p.z)).w;
+	float z = QueryScene(float3(p.x, p.y, p.z + EPSILON)).w - QueryScene(float3(p.x, p.y, p.z - EPSILON)).w;
+	return normalize(float3(x, y, z));
+}
+
+float CalculateShadow(Ray shadowRay, float distToShadePoint)
+{
+	float rayDist = 0;
+	int marchSteps = 0;
+	float shadowIntensity = 0.2;
+	float brightness = 1;
+
+	while (rayDist < distToShadePoint)
+	{
+		marchSteps++;
+		float4 sceneInfo = QueryScene(shadowRay.origin);
+		float dist = sceneInfo.w;
+        
+		if (dist <= EPSILON)
+		{
+			return shadowIntensity;
+		}
+
+		brightness = min(brightness, dist * 200.0);
+
+		shadowRay.origin += shadowRay.direction * dist;
+		rayDist += dist;
+	}
+	return shadowIntensity + (1.0 - shadowIntensity) * brightness;
+}
+
+[numthreads(16, 16, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+	uint width, height;
+	destinationTex.GetDimensions(width, height);
+	
+	if (id.x >= width || id.y >= height)
+		return;
+	
+	// init to source texture
+	destinationTex[id.xy] = sourceTex[id.xy];
+
+	// create camera ray
+	float2 uv = id.xy / float2(width, height) * 2.0 - 1.0;
+	float3 origin = mul(_CameraToWorld, float4(0, 0, 0, 1)).xyz;
+	float3 direction = mul(_CameraInverseProjection, float4(uv, 0, 1)).xyz;
+	direction = mul(_CameraToWorld, float4(direction, 0)).xyz;
+	direction = normalize(direction);
+
+	Ray ray;
+	ray.origin = origin;
+	ray.direction = direction;
+	
+	// march the ray
+	int marchSteps = 0;
+	float rayDist = 0.0;
+	
+	while (rayDist < MAX_DISTANCE)
+	{
+		++marchSteps;
+		float4 sceneInfo = QueryScene(ray.origin);
+		
+		float dist = sceneInfo.w;
+		float3 color = sceneInfo.rgb;
+		
+		ray.origin = ray.origin + ray.direction * dist;
+		rayDist += dist;
+		
+		if (dist < EPSILON)
+		{
+			float3 surfacePoint = ray.origin;
+			float3 normal = EstimateNormal(surfacePoint - ray.direction * EPSILON);
+			float3 lightDir = (bPositionLight) ? normalize(_Light - surfacePoint) : -_Light;
+			float lighting = saturate(dot(normal, lightDir));
+			
+			// shadow
+			Ray shadowRay;
+			shadowRay.origin = surfacePoint + normal * SHADOW_BIAS;
+			shadowRay.direction = (bPositionLight) ? normalize(_Light - shadowRay.origin) : -_Light;
+			
+			float distToLight = (bPositionLight) ? distance(shadowRay.origin, _Light) : MAX_DISTANCE;
+			float shadow = CalculateShadow(shadowRay, distToLight);
+			
+			// calculate final color
+			destinationTex[id.xy] = float4(color * lighting * shadow, 1.0);
+			break;
+		}
+	}
+}
