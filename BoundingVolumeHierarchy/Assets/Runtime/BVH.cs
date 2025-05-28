@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEngine;
-using static BVH;
-using static Master;
 
 public class BVH
 {
@@ -10,36 +8,15 @@ public class BVH
 	public readonly Triangle[] triangles;
 	int maxDepth;
 	int numTriangles;
-
-	public class BuildStats
-	{
-		public float timeMS;
-		public int triangles;
-		public int nodeCount;
-		public int leafCount;
-		public int depthMin;
-		public int depthMax;
-		public float depthMean;
-		public int leafTriMin;
-		public int leafTriMax;
-		public float leafTriMean;
-	};
-	public BuildStats buildStats { get; private set; } = new BuildStats();
+	public BuildStats buildStats { get; private set; }
 
 	public BVH(Mesh mesh, int maxDepth = 16)
 	{
-		this.maxDepth = maxDepth;
-		buildStats.leafCount = 0;
-		buildStats.depthMin = int.MaxValue;
-		buildStats.depthMax = int.MinValue;
-		buildStats.depthMean = 0f;
-		buildStats.leafTriMin = int.MaxValue;
-		buildStats.leafTriMax = int.MinValue;
-		buildStats.leafTriMean = 0f;
-
-		Stopwatch stopwatch = new Stopwatch();
-		stopwatch.Start();
+		buildStats = new BuildStats(this);
+		buildStats.StartRecord();
 		{
+			this.maxDepth = maxDepth;
+
 			// init triangles
 			Vector3[] verts = mesh.vertices;
 			int[] indices = mesh.triangles;
@@ -65,15 +42,127 @@ public class BVH
 			nodeList.Add(root);
 			splitRecursive(root);
 		}
-		stopwatch.Stop();
-
-		buildStats.timeMS = stopwatch.ElapsedMilliseconds;
-		buildStats.triangles = numTriangles;
-		buildStats.nodeCount = nodeList.Count;
-		buildStats.depthMean /= buildStats.leafCount;
-		buildStats.leafTriMean /= buildStats.leafCount;
+		buildStats.EndRecord();
 	}
 
+	private void splitRecursive(Node parent, int depth = 0)
+	{
+		float parentCost = evaluateBoundsCost(parent.boundsMax - parent.boundsMin, parent.endIndex - parent.startIndex);
+		(int splitAxis, float splitValue, float cost) = sampleSplit(parent, parent.startIndex, parent.endIndex);
+
+		if (cost >= parentCost || depth == maxDepth)
+		{
+			buildStats.RecordNode(depth, parent.endIndex - parent.startIndex);
+			return;
+		}
+		else
+		{
+			// reorder triangles
+			int indexA = parent.startIndex;
+			int indexB = parent.endIndex - 1;
+			Bounds boundsA = new Bounds(triangles[indexA].vertexA, Vector3.zero);
+			Bounds boundsB = new Bounds(triangles[indexB].vertexA, Vector3.zero);
+
+			while (indexA <= indexB)
+			{
+				Triangle triangle = triangles[indexA];
+				Vector3 triCenter = (triangle.vertexA + triangle.vertexB + triangle.vertexC) / 3f;
+				if (triCenter[splitAxis] < splitValue)
+				{
+					++indexA;
+					encapsulate(ref boundsA, triangle);
+				}
+				else
+				{
+					(triangles[indexA], triangles[indexB]) = (triangles[indexB], triangles[indexA]); // swap
+					--indexB;
+					encapsulate(ref boundsB, triangle);
+				}
+			}
+
+			// add children to node list
+			nodeList.Add(new Node(boundsA.min, boundsA.max, parent.startIndex, indexA));
+			parent.childAIndex = nodeList.Count - 1;
+			nodeList.Add(new Node(boundsB.min, boundsB.max, indexA, parent.endIndex));
+			parent.childBIndex = nodeList.Count - 1;
+
+			// reculively split childres
+			splitRecursive(nodeList[parent.childAIndex], depth + 1);
+			splitRecursive(nodeList[parent.childBIndex], depth + 1);
+		}
+	}
+
+	private static void encapsulate(ref Bounds bounds, Triangle tri)
+	{
+		bounds.Encapsulate(tri.vertexA);
+		bounds.Encapsulate(tri.vertexB);
+		bounds.Encapsulate(tri.vertexC);
+	}
+
+	(int axis, float value, float cost) sampleSplit(Node node, int start, int end)
+	{
+		if (end - start <= 1) return (0, 0, float.PositiveInfinity); // no split possible
+
+		const int NUM_SAMPLES = 5;
+		int bestSplitAxis = 0;
+		float bestSplitValue = 0;
+		float bestCost = float.MaxValue;
+
+		for (int axis = 0; axis < 3; ++axis)
+		{
+			for (int i = 0; i < NUM_SAMPLES; ++i)
+			{
+				float splitT = (i + 1) / (NUM_SAMPLES + 1f);
+				float splitValue = Mathf.Lerp(node.boundsMin[axis], node.boundsMax[axis], splitT);
+				float cost = evaluateSplit(axis, splitValue, start, end);
+				if (cost < bestCost)
+				{
+					bestCost = cost;
+					bestSplitAxis = axis;
+					bestSplitValue = splitValue;
+				}
+			}
+		}
+
+		return (bestSplitAxis, bestSplitValue, bestCost);
+	}
+
+	float evaluateSplit(int splitAxis, float splitValue, int start, int end)
+	{
+		Bounds boundA = new Bounds(triangles[start].vertexA, Vector3.zero);
+		Bounds boundB = new Bounds(triangles[end - 1].vertexA, Vector3.zero);
+		int numTrianglesInA = 0;
+		int numTrianglesInB = 0;
+
+		for (int i = start; i < end; ++i)
+		{
+			Triangle triangle = triangles[i];
+			Vector3 triCenter = (triangle.vertexA + triangle.vertexB + triangle.vertexC) / 3f;
+			if (triCenter[splitAxis] < splitValue)
+			{
+				encapsulate(ref boundA, triangle);
+				++numTrianglesInA;
+			}
+			else
+			{
+				encapsulate(ref boundB, triangle);
+				++numTrianglesInB;
+			}
+		}
+
+		float costA = evaluateBoundsCost(boundA.size, numTrianglesInA);
+		float costB = evaluateBoundsCost(boundB.size, numTrianglesInB);
+		return (costA + costB);
+	}
+
+	static float evaluateBoundsCost(Vector3 size, int numTriangles)
+	{
+		float halfArea = size.x * size.y + size.x * size.z + size.y * size.z;
+		float cost = halfArea * numTriangles;
+		return cost == 0 ? float.MaxValue : cost;
+	}
+
+	// internal classes
 	public class Node
 	{
 		public Vector3 boundsMin;
@@ -94,74 +183,60 @@ public class BVH
 		}
 	}
 
-	private void splitRecursive(Node parent, int depth = 0)
+	public class BuildStats
 	{
-		if (depth == maxDepth || parent.startIndex + 1 == parent.endIndex)
+		public float timeMS;
+		public int triangles;
+		public int nodeCount;
+		public int leafCount;
+		public int depthMin;
+		public int depthMax;
+		public float depthMean;
+		public int leafTriMin;
+		public int leafTriMax;
+		public float leafTriMean;
+
+		BVH owner;
+		public BuildStats(BVH bvh)
 		{
-			++buildStats.leafCount;
-			buildStats.depthMin = Mathf.Min(buildStats.depthMin, depth);
-			buildStats.depthMax = Mathf.Max(buildStats.depthMax, depth);
-			buildStats.depthMean += depth;
-			int numLeafTriangles = parent.endIndex - parent.startIndex;
-			buildStats.leafTriMin = Mathf.Min(buildStats.leafTriMin, numLeafTriangles);
-			buildStats.leafTriMax = Mathf.Max(buildStats.leafTriMax, numLeafTriangles);
-			buildStats.leafTriMean += numLeafTriangles;
-			return;
+			owner = bvh;
 		}
 
-		// split the bounding box in half along its longest axis
-		Vector3 size = parent.boundsMax - parent.boundsMin;
-		int splitAxis = size.x > Mathf.Max(size.y, size.z) ? 0 : size.y > size.z ? 1 : 2;
-		float splitValue = ((parent.boundsMax + parent.boundsMin) * 0.5f)[splitAxis];
-
-		// reorder triangles
-		int indexA = parent.startIndex;
-		int indexB = parent.endIndex - 1;
-		while (indexA <= indexB)
+		public void RecordNode(int depth, int numTris)
 		{
-			Triangle triangle = triangles[indexA];
-			Vector3 triCenter = (triangle.vertexA + triangle.vertexB + triangle.vertexC) / 3f;
-			if (triCenter[splitAxis] < splitValue)
-			{
-				++indexA;
-			}
-			else
-			{
-				(triangles[indexA], triangles[indexB]) = (triangles[indexB], triangles[indexA]); // swap
-				--indexB;
-			}
+			++leafCount;
+			depthMin = Mathf.Min(depthMin, depth);
+			depthMax = Mathf.Max(depthMax, depth);
+			depthMean += depth;
+			leafTriMin = Mathf.Min(leafTriMin, numTris);
+			leafTriMax = Mathf.Max(leafTriMax, numTris);
+			leafTriMean += numTris;
 		}
 
-		// add children to node list
-		bool bChildA = indexA > parent.startIndex;
-		bool bChildB = indexA < parent.endIndex;
-		if (bChildA)
+		Stopwatch stopwatch;
+		public void StartRecord()
 		{
-			(Vector3 aMin, Vector3 aMax) = calcBounds(triangles, parent.startIndex, indexA);
-			nodeList.Add(new Node(aMin, aMax, parent.startIndex, indexA));
-			parent.childAIndex = nodeList.Count - 1;
-		}
-		if (bChildB)
-		{
-			(Vector3 bMin, Vector3 bMax) = calcBounds(triangles, indexA, parent.endIndex);
-			nodeList.Add(new Node(bMin, bMax, indexA, parent.endIndex));
-			parent.childBIndex = nodeList.Count - 1;
-		}
-		// reculively split childres
-		if (bChildA) splitRecursive(nodeList[parent.childAIndex], depth + 1);
-		if (bChildB) splitRecursive(nodeList[parent.childBIndex], depth + 1);
-	}
+			stopwatch = new Stopwatch();
+			stopwatch.Start();
 
-	private static (Vector3, Vector3) calcBounds(Triangle[] triangles, int startIndex, int endIndex)
-	{
-		Bounds bounds = new Bounds(triangles[startIndex].vertexA, Vector3.zero);
-		for (int i = startIndex; i < endIndex; ++i)
-		{
-			Triangle triangle = triangles[i];
-			bounds.Encapsulate(triangle.vertexA);
-			bounds.Encapsulate(triangle.vertexB);
-			bounds.Encapsulate(triangle.vertexC);
+			leafCount = 0;
+			depthMin = int.MaxValue;
+			depthMax = int.MinValue;
+			depthMean = 0f;
+			leafTriMin = int.MaxValue;
+			leafTriMax = int.MinValue;
+			leafTriMean = 0f;
 		}
-		return (bounds.min, bounds.max);
-	}
+
+		public void EndRecord()
+		{
+			stopwatch.Stop();
+
+			timeMS = stopwatch.ElapsedMilliseconds;
+			triangles = owner.numTriangles;
+			nodeCount = owner.nodeList.Count;
+			depthMean /= leafCount;
+			leafTriMean /= leafCount;
+		}
+	};
 }

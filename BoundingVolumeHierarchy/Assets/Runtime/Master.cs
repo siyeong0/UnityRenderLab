@@ -13,7 +13,7 @@ public class Master : MonoBehaviour
 	[SerializeField, Range(0, 1)] float wireFrameAlpha = 0.15f;
 	enum EFillMode { LeafOnly, All }
 	[SerializeField] EFillMode fillMode = EFillMode.LeafOnly;
-	[SerializeField, Range(0,1)] float boxAlpha = 0.15f;
+	[SerializeField, Range(0, 1)] float boxAlpha = 0.15f;
 
 	Mesh mesh;
 	Mesh prevMesh;
@@ -33,7 +33,7 @@ public class Master : MonoBehaviour
 
 	private void OnDrawGizmos()
 	{
-		drawNodeRecursive(bvh.nodeList[0], 0);
+		if (bvh != null) drawNodeRecursive(bvh.nodeList[0], 0);
 	}
 
 	private void drawNodeRecursive(BVH.Node node, int depth = 0)
@@ -58,7 +58,7 @@ public class Master : MonoBehaviour
 		Bounds bounds = new Bounds((node.boundsMax + node.boundsMin) * 0.5f, (node.boundsMax - node.boundsMin));
 
 		Gizmos.matrix = target.transform.localToWorldMatrix;
-		if (fillMode == EFillMode.All || 
+		if (fillMode == EFillMode.All ||
 			fillMode == EFillMode.LeafOnly && depth == visDepth)
 		{
 			Gizmos.color = cubeColor;
@@ -84,7 +84,7 @@ public class Master : MonoBehaviour
 		boldStyle.fontSize = 20;
 
 		GUI.color = Color.green;
-		GUI.Label(new Rect(20, 20, 400, 800), 
+		GUI.Label(new Rect(20, 20, 400, 800),
 			"Time (ms): " + bvh.buildStats.timeMS + "\n" +
 			"Triangles: " + bvh.buildStats.triangles + "\n" +
 			"Node Count: " + bvh.buildStats.nodeCount + "\n" +
