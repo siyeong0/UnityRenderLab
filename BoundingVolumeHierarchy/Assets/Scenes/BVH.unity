@@ -152,9 +152,9 @@ MonoBehaviour:
   maxDepth: 32
   visDepth: 16
   wireFrame: 1
-  wireFrameAlpha: 0.022
+  wireFrameAlpha: 0.036
   fillMode: 0
-  boxAlpha: 0.214
+  boxAlpha: 0.165
 --- !u!4 &38423869
 Transform:
   m_ObjectHideFlags: 0

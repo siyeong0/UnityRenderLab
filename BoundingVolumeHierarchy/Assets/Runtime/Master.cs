@@ -79,6 +79,7 @@ public class Master : MonoBehaviour
 
 	void OnGUI()
 	{
+		if (bvh == null) return;
 		GUIStyle boldStyle = new GUIStyle(GUI.skin.label);
 		boldStyle.fontStyle = FontStyle.Bold;  // 굵게 설정
 		boldStyle.fontSize = 20;
