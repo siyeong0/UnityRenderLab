@@ -1,0 +1,49 @@
+#pragma kernel CSMain
+
+Texture2D<float4> sourceTex;
+RWTexture2D<float4> destinationTex;
+
+struct Triangle
+{
+	float3 vertexA, vertexB, vertexC;
+	float3 normalA, normalB, normalC;
+};
+
+struct Ray
+{
+	float3 origin;
+	float3 dir;
+};
+
+struct HitInfo
+{
+	bool bHit;
+	float dist;
+	float3 hitPoint;
+	float3 normal;
+	int triIndex;
+};
+
+struct BVHNode
+{
+	float3 boundsMin;
+	float3 boundsMax;
+	int startIndex;
+	int endIndex;
+	int childAIndex;
+	int childBIndex;
+};
+
+[numthreads(32,32,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	int width, height;
+	destinationTex.GetDimensions(width, height);
+	
+	if (id.x >= width || id.y >= height)
+		return;
+	
+	destinationTex[id.xy] = sourceTex[id.xy];
+	
+	
+}

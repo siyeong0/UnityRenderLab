@@ -150,7 +150,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   target: {fileID: 1834783453}
   maxDepth: 32
-  visDepth: 16
+  visDepth: 4
   wireFrame: 1
   wireFrameAlpha: 0.036
   fillMode: 0

@@ -72,9 +72,12 @@ public class Master : MonoBehaviour
 			Gizmos.DrawWireCube(bounds.center, bounds.size);
 		}
 
-		// call recursivelydrawNodeRecursive(bvh.nodeList[node.childAIndex], depth + 1);
-		if (node.childAIndex != -1) drawNodeRecursive(bvh.nodeList[node.childAIndex], depth + 1);
-		if (node.childBIndex != -1) drawNodeRecursive(bvh.nodeList[node.childBIndex], depth + 1);
+		// call recursively
+		if (node.numTriangles == 0) // is not a leaf node
+		{
+			drawNodeRecursive(bvh.nodeList[(int)node.startIndex], depth + 1);
+			drawNodeRecursive(bvh.nodeList[(int)node.startIndex + 1], depth + 1);
+		}
 	}
 
 	void OnGUI()
