@@ -386,11 +386,11 @@ MonoBehaviour:
   target: {fileID: 1834783453}
   maxDepth: 32
   leafThreshold: 32
-  visDepth: 16
+  visDepth: 13
   wireFrame: 1
-  wireFrameAlpha: 0.103
-  fillMode: 0
-  boxAlpha: 0.054
+  wireFrameAlpha: 0.08
+  fillMode: 1
+  boxAlpha: 0.018
   rotateCamera: 1
 --- !u!1001 &1444590587
 PrefabInstance:

@@ -27,7 +27,6 @@ HitInfo CalculateRayCollision(Ray ray)
 		int nodeIndex = stack[--stackIndex];
 		BVHNode node = bvhNodes[nodeIndex];
 		
-		// float3 nodeColor = HSVtoRGB(fmod(float(nodeIndex) / 6.0, 1.0), 1.0, 1.0);
 		float3 nodeColor = HSVtoRGB(fmod(float(nodeIndex) / 6.0, 1.0), 1.0, 1.0);
 		
 		if (node.numTriangles > 0) // is Leaf node
