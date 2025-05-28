@@ -7,7 +7,7 @@ It contains ...
 - Marching cubes
 - Ray marching
 - BVH
-## Ray tracing
+## Ray Tracing
 
 An offline ray tracing implementation using accumulation techniques.
 - Executed in the pixel shader.
