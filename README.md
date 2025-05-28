@@ -6,7 +6,7 @@ It contains ...
 - Ray tracing
 - Marching cubes
 - Ray marching
-
+- BVH
 ## Ray tracing
 
 An offline ray tracing implementation using accumulation techniques.
@@ -26,3 +26,10 @@ Implementation of the Marching Cubes algorithm for both CPU and GPU.
 Implementation of ray marching using compute shaders. It includes various SDF-based shapes, and CSG operations.
 
 <img width="640" alt="22_mirror" src="https://github.com/user-attachments/assets/2b25477a-7873-4e8a-9a95-52200c9d8465" />
+
+## BVH
+A custom Bounding Volume Hierarchy (BVH) generator. 
+It builds very balanced tree using the Surface Area Heuristic (SAH) algorithm.
+
+<img width="640" alt="22_mirror" src="https://github.com/user-attachments/assets/afde0f73-1d86-437d-986c-0fe7f5949b68" />
+
