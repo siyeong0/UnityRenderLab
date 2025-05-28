@@ -6,20 +6,22 @@ public class BVH
 {
 	public readonly List<Node> nodeList;
 	public readonly Triangle[] triangles;
-	int maxDepth;
 	uint numTriangles;
+	int maxDepth;
+	int leafThreshold;
 
 	Vector3[] triangleCenters;
 	BoundingBox[] triangleBounds;
 
 	public BuildStats buildStats { get; private set; }
 
-	public BVH(Mesh mesh, int maxDepth = 16)
+	public BVH(Mesh mesh, int maxDepth = 16, int leafThreshold = 4)
 	{
 		buildStats = new BuildStats(this);
 		buildStats.StartRecord();
 		{
 			this.maxDepth = maxDepth;
+			this.leafThreshold = leafThreshold;
 
 			// init triangles
 			Vector3[] verts = mesh.vertices;
@@ -52,22 +54,25 @@ public class BVH
 
 			Node root = new Node(new BoundingBox(mesh.bounds.min, mesh.bounds.max));
 			nodeList.Add(root);
-			splitRecursive(root, 0, 0, numTriangles);
+			splitRecursive(0, 0, 0, numTriangles);
 		}
 		buildStats.EndRecord();
 	}
 
-	private void splitRecursive(Node parent, int depth, uint startIndex, uint endIndex)
+	private void splitRecursive(int parentIndex, int depth, uint startIndex, uint endIndex)
 	{
-		float parentCost = evaluateBoundsCost(parent.boundsMax - parent.boundsMin, (int)(endIndex - startIndex));
+		Node parent = nodeList[parentIndex];
+		int numTris = (int)(endIndex - startIndex);
+		float parentCost = evaluateBoundsCost(parent.boundsMax - parent.boundsMin, numTris);
 		(int splitAxis, float splitValue, float cost) = sampleSplit(parent, startIndex, endIndex);
 
-		if (cost >= parentCost || depth == maxDepth)
+		if (cost >= parentCost || depth == maxDepth || numTris <= leafThreshold)
 		{
 			parent.startIndex = startIndex;
 			parent.numTriangles = endIndex - startIndex;
+			nodeList[parentIndex] = parent; // update parent node with new start index
 
-			buildStats.RecordNode(depth, (int)(endIndex - startIndex));
+			buildStats.RecordNode(depth, numTris);
 			return;
 		}
 
@@ -111,10 +116,11 @@ public class BVH
 		int childBIndex = nodeList.Count - 1;
 
 		parent.startIndex = (uint)childAIndex;
+		nodeList[parentIndex] = parent; // update parent node with new start index
 
 		// reculively split childres
-		splitRecursive(nodeList[childAIndex], depth + 1, startIndex, splitIndex);
-		splitRecursive(nodeList[childBIndex], depth + 1, splitIndex, endIndex);
+		splitRecursive(childAIndex, depth + 1, startIndex, splitIndex);
+		splitRecursive(childBIndex, depth + 1, splitIndex, endIndex);
 
 	}
 
@@ -186,7 +192,7 @@ public class BVH
 	}
 
 	// internal classes
-	public class Node
+	public struct Node
 	{
 		public Vector3 boundsMin;
 		public Vector3 boundsMax;
@@ -201,6 +207,11 @@ public class BVH
 			this.boundsMax = bounds.max;
 			this.startIndex = startIndex;
 			this.numTriangles = numTriangles;
+		}
+
+		public static int GetSize()
+		{
+			return sizeof(float) * 3 * 2 + sizeof(uint) * 2;
 		}
 	}
 

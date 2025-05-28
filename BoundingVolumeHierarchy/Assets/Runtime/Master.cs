@@ -1,11 +1,15 @@
-﻿using UnityEditor;
+﻿using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.Rendering;
 
-[ExecuteAlways]
+[ExecuteAlways, ImageEffectAllowedInSceneView]
 public class Master : MonoBehaviour
 {
+	[SerializeField] ComputeShader raytracingShader;
+
 	[SerializeField] GameObject target;
 	[SerializeField] int maxDepth = 16;
+	[SerializeField] int leafThreshold = 4;
 
 	[Header("Visualization Settings")]
 	[SerializeField] uint visDepth = 0;
@@ -15,10 +19,35 @@ public class Master : MonoBehaviour
 	[SerializeField] EFillMode fillMode = EFillMode.LeafOnly;
 	[SerializeField, Range(0, 1)] float boxAlpha = 0.15f;
 
+	[SerializeField] bool rotateCamera = true;
+
 	Mesh mesh;
 	Mesh prevMesh;
 	BVH bvh;
 
+	Camera currCamera;
+	RenderTexture outputTexture;
+	ComputeBuffer triangleBuffer;
+	ComputeBuffer bvhNodeBuffer;
+
+	private void OnRenderImage(RenderTexture source, RenderTexture destination)
+	{
+		if (bvh == null)
+		{
+			Graphics.Blit(source, destination);
+			return;
+		}
+
+		initFrame();
+		updateParameters();
+
+		raytracingShader.SetTexture(0, "sourceTex", source);
+		raytracingShader.SetTexture(0, "destinationTex", outputTexture);
+
+		raytracingShader.Dispatch(0, Mathf.CeilToInt(currCamera.pixelWidth / 16f), Mathf.CeilToInt(currCamera.pixelHeight / 16f), 1);
+
+		Graphics.Blit(outputTexture, destination);
+	}
 
 	private void Update()
 	{
@@ -26,9 +55,56 @@ public class Master : MonoBehaviour
 
 		if (mesh != null && mesh != prevMesh)
 		{
-			bvh = new BVH(mesh, maxDepth);
+			bvh = new BVH(mesh, maxDepth, leafThreshold);
 			prevMesh = mesh;
 		}
+
+		if (rotateCamera && Application.isPlaying)
+		{
+			Camera.main.transform.RotateAround(Vector3.zero, Vector3.up, 20 * Time.deltaTime);
+		}
+	}
+
+	private void initFrame()
+	{
+		currCamera = Camera.current;
+
+		// init render target
+		if (outputTexture == null ||
+			outputTexture.width != currCamera.pixelWidth ||
+			outputTexture.height != currCamera.pixelHeight)
+		{
+			if (outputTexture != null) outputTexture.Release();
+			outputTexture = new RenderTexture(currCamera.pixelWidth, currCamera.pixelHeight, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+			outputTexture.enableRandomWrite = true;
+			outputTexture.Create();
+		}
+
+		// init triangle buffer
+		if (triangleBuffer == null || triangleBuffer.count != bvh.triangles.Length)
+		{
+			if (triangleBuffer != null) triangleBuffer.Release();
+			triangleBuffer = new ComputeBuffer(bvh.triangles.Length, Triangle.GetSize());
+			triangleBuffer.SetData(bvh.triangles);
+
+			raytracingShader.SetBuffer(0, "triangles", triangleBuffer);
+		}
+		// init bvh node buffer
+		if (bvhNodeBuffer == null || bvhNodeBuffer.count != bvh.nodeList.Count)
+		{
+			if (bvhNodeBuffer != null) bvhNodeBuffer.Release();
+			bvhNodeBuffer = new ComputeBuffer(bvh.nodeList.Count, BVH.Node.GetSize());
+			bvhNodeBuffer.SetData(bvh.nodeList.ToArray());
+
+			raytracingShader.SetBuffer(0, "bvhNodes", bvhNodeBuffer);
+		}
+	}
+
+	void updateParameters()
+	{
+		raytracingShader.SetInt("numTriangles", bvh.triangles.Length);
+		raytracingShader.SetMatrix("_CameraToWorld", currCamera.cameraToWorldMatrix);
+		raytracingShader.SetMatrix("_CameraInverseProjection", currCamera.projectionMatrix.inverse);
 	}
 
 	private void OnDrawGizmos()
@@ -38,7 +114,7 @@ public class Master : MonoBehaviour
 
 	private void drawNodeRecursive(BVH.Node node, int depth = 0)
 	{
-		if (depth > visDepth || node == null) return;
+		if (depth > visDepth) return;
 
 		Color color = Color.HSVToRGB(depth / 6f % 1, 1, 1);
 		if (fillMode == EFillMode.All)
@@ -108,5 +184,28 @@ public class Master : MonoBehaviour
 	{
 		mesh = null;
 		prevMesh = null;
+
+		if (outputTexture != null)
+		{
+			outputTexture.Release();
+			outputTexture = null;
+		}
+		if (triangleBuffer != null)
+		{
+			triangleBuffer.Release();
+			triangleBuffer = null;
+		}
+		if (bvhNodeBuffer != null)
+		{
+			bvhNodeBuffer.Release();
+			bvhNodeBuffer = null;
+		}
+	}
+
+	private void OnDestroy()
+	{
+		if (outputTexture != null) outputTexture.Release();
+		if (triangleBuffer != null) triangleBuffer.Release();
+		if (bvhNodeBuffer != null) bvhNodeBuffer.Release();
 	}
 }

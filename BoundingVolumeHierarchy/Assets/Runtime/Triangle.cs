@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-public class Triangle
+public struct Triangle
 {
 	public Vector3 vertexA;
 	public Vector3 vertexB;
@@ -33,5 +33,10 @@ public class Triangle
 		this.NormalA = normalA;
 		this.NormalB = normalB;
 		this.NormalC = normalC;
+	}
+
+	public static int GetSize()
+	{
+		return sizeof(float) * 3 * 6; // 3 vertices + 3 normals
 	}
 }

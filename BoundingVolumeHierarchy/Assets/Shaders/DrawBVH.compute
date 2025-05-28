@@ -1,49 +1,102 @@
+#include "RayTracing.hlsl"
+
 #pragma kernel CSMain
 
 Texture2D<float4> sourceTex;
 RWTexture2D<float4> destinationTex;
 
-struct Triangle
-{
-	float3 vertexA, vertexB, vertexC;
-	float3 normalA, normalB, normalC;
-};
+RWStructuredBuffer<Triangle> triangles;
+RWStructuredBuffer<BVHNode> bvhNodes;
+uint numTriangles;
 
-struct Ray
-{
-	float3 origin;
-	float3 dir;
-};
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
 
-struct HitInfo
+HitInfo CalculateRayCollision(Ray ray)
 {
-	bool bHit;
-	float dist;
-	float3 hitPoint;
-	float3 normal;
-	int triIndex;
-};
+	HitInfo result;
+	result.dist = 9999.9;
+	result.triIndex = -1;
 
-struct BVHNode
-{
-	float3 boundsMin;
-	float3 boundsMax;
-	int startIndex;
-	int endIndex;
-	int childAIndex;
-	int childBIndex;
-};
+	int stack[32];
+	int stackIndex = 0;
+	stack[stackIndex++] = 0;
+	
+	while (stackIndex > 0)
+	{
+		int nodeIndex = stack[--stackIndex];
+		BVHNode node = bvhNodes[nodeIndex];
+		
+		// float3 nodeColor = HSVtoRGB(fmod(float(nodeIndex) / 6.0, 1.0), 1.0, 1.0);
+		float3 nodeColor = HSVtoRGB(fmod(float(nodeIndex) / 6.0, 1.0), 1.0, 1.0);
+		
+		if (node.numTriangles > 0) // is Leaf node
+		{
+			for (int i = 0; i < (int) node.numTriangles; i++)
+			{
+				Triangle tri = triangles[node.startIndex + i];
+				HitInfo triHitInfo = RayTriangle(ray, tri);
 
-[numthreads(32,32,1)]
-void CSMain (uint3 id : SV_DispatchThreadID)
+				if (triHitInfo.bHit && triHitInfo.dist < result.dist)
+				{
+					result = triHitInfo;
+					result.triIndex = node.startIndex + i;
+					result.color = float4(nodeColor, 1.0);
+				}
+			}
+		}
+		else
+		{
+			int childIndexA = node.startIndex + 0;
+			int childIndexB = node.startIndex + 1;
+			BVHNode childA = bvhNodes[childIndexA];
+			BVHNode childB = bvhNodes[childIndexB];
+
+			float distA = RayBoundingBoxDst(ray, childA.boundsMin, childA.boundsMax);
+			float distB = RayBoundingBoxDst(ray, childB.boundsMin, childB.boundsMax);
+
+			bool isNearestA = distA <= distB;
+			float distNear = isNearestA ? distA : distB;
+			float distFar = isNearestA ? distB : distA;
+			int childIndexNear = isNearestA ? childIndexA : childIndexB;
+			int childIndexFar = isNearestA ? childIndexB : childIndexA;
+
+			if (distFar < result.dist)
+				stack[stackIndex++] = childIndexFar;
+			if (distNear < result.dist)
+				stack[stackIndex++] = childIndexNear;
+		}
+	}
+
+	return result;
+}
+
+[numthreads(16, 16, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
 {
-	int width, height;
+	uint width, height;
 	destinationTex.GetDimensions(width, height);
 	
 	if (id.x >= width || id.y >= height)
 		return;
 	
+	// init to source texture
 	destinationTex[id.xy] = sourceTex[id.xy];
+
+	// create camera ray
+	float2 uv = id.xy / float2(width, height) * 2.0 - 1.0;
+	float3 origin = mul(_CameraToWorld, float4(0, 0, 0, 1)).xyz;
+	float3 direction = mul(_CameraInverseProjection, float4(uv, 0, 1)).xyz;
+	direction = mul(_CameraToWorld, float4(direction, 0)).xyz;
+	direction = normalize(direction);
+
+	Ray ray;
+	ray.origin = origin;
+	ray.dir = direction;
+	ray.invDir = 1.0 / direction;
 	
+	HitInfo hitInfo = CalculateRayCollision(ray);
 	
+	if (hitInfo.bHit)
+		destinationTex[id.xy] = hitInfo.color;
 }
