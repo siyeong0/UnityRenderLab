@@ -29,7 +29,7 @@ Implementation of ray marching using compute shaders. It includes various SDF-ba
 
 ## BVH
 A custom Bounding Volume Hierarchy (BVH) generator. 
-It builds very balanced tree using the Surface Area Heuristic (SAH) algorithm.
+It builds a very balanced tree using the Surface Area Heuristic (SAH) algorithm.
 
 <img width="640" alt="22_mirror" src="https://github.com/user-attachments/assets/afde0f73-1d86-437d-986c-0fe7f5949b68" />
 
