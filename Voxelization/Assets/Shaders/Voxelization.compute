@@ -1,0 +1,60 @@
+#pragma kernel CSMain
+
+// Mesh
+RWStructuredBuffer<float3> vertices;
+RWStructuredBuffer<int> indices;
+int numTriangles;
+
+// Voxel grid
+RWStructuredBuffer<uint> voxelGrid;
+float voxelSize;
+float invVoxelSize;
+float gridBoundsExtent;
+
+struct AABB
+{
+    float3 min;
+    float3 max;
+};
+
+AABB computeTriangleAABB(Triangle tri)
+{
+    AABB aabb;
+    aabb.min.x = min(min(tri.v0.x, tri.v1.x, tri.v2.x));
+    aabb.min.x = min(min(tri.v0.y, tri.v1.y, tri.v2.y));
+    aabb.min.x = min(min(tri.v0.z, tri.v1.z, tri.v2.z));
+    aabb.max.x = max(max(tri.v0.x, tri.v1.x, tri.v2.x));
+    aabb.max.x = max(max(tri.v0.y, tri.v1.y, tri.v2.y));
+    aabb.max.x = max(max(tri.v0.z, tri.v1.z, tri.v2.z));
+}
+
+int3 computeVoxelIndex(float3 pos)
+{
+    float3 norm = (pos - voxelGridMin) * invVoxelSize;
+    int3 index;
+    index.x = int(norm.x);
+    index.y = int(norm.y);
+    index.z = int(norm.z);
+    return index;
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numTriangles) return;
+
+    Triangle tri = triangles[id.x];
+    AABB triAABB = computeTriangleAABB(tri);
+
+    for (float z = min.z; z <= max.z; z += voxelSize)
+    {
+        for (float y = min.y; y <= max.y; y += voxelSize)
+        {
+            for (float x = min.x; x <= max.x; x += voxelSize)
+            {
+                int3 voxelIndex = computeVoxelIndex(float3(x,y,z));
+
+            }
+        }
+    }
+}

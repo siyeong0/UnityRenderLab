@@ -1,9 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UIElements;
-using static UnityEditor.PlayerSettings;
 
-public class Master : MonoBehaviour
+public class TriangleVoxelizationTest : MonoBehaviour
 {
 	[SerializeField] GameObject vertexA;
 	[SerializeField] GameObject vertexB;

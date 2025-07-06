@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class MeshLoader : MonoBehaviour
+public class MeshVoxelizationTest : MonoBehaviour
 {
 	[SerializeField] Mesh mesh;
 
